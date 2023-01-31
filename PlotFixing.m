@@ -4,16 +4,7 @@ v = VideoReader('Videos/slowmoCut2.mp4');
 opticFlow = opticalFlowFarneback;
 h = figure();
 movegui(h);
-hFig = figure('MenuBar','none',...
-    'Units','pixels',...
-    'Position',[100 100 v.Width v.Height]);
-hAx = axes('Parent',hFig,...
-    'Units','pixels',...
-    'Position',[0 0 v.Width v.Height],...
-    'NextPlot','replacechildren',...
-    'Visible','off',...
-    'XTick',[],...
-    'YTick',[]);
+
 
 
 
@@ -30,12 +21,9 @@ movVector = zeros(nFrames,3);
 iter = 0;
 rectForOptiFlow = [0,0,0,0];
 while hasFrame(v)
-    hIm = image(uint8(zeros(v.Height,v.Width,3)),...
-    'Parent',hAx);
     reFrame = readFrame(v);
     iter = iter+1;
     im = reFrame;
-    hIm.CData = im;
     im = histeq(im);
 
     [centers, radii, metric] = imfindcircles(im,[10 150], 'ObjectPolarity','dark');%imfindcircles(I,[15 150], 'ObjectPolarity','dark');
@@ -52,6 +40,7 @@ while hasFrame(v)
     frameGray = im2gray(frameRGB); 
     
     flow = estimateFlow(opticFlow,frameGray);
+    imshow(im)
     hold on
     
     plot(flow,'DecimationFactor',[5 5],'ScaleFactor',2);
