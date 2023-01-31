@@ -66,9 +66,13 @@ while hasFrame(v)
    
 
 end
-
+v2 = VideoReader('Videos/slowmoCut2.mp4');
+figure
+imshow(readFrame(v2))
+hold on
 plot(movVector(:,1),movVector(:,2),'r-o','LineWidth',2);
 legend('Measured trajectory');
+hold off
 % Remove any unused structure array elements
 s(k:end) = [];
 
