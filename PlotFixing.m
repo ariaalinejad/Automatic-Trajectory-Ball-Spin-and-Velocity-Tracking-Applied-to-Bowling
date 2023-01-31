@@ -38,15 +38,15 @@ while hasFrame(v)
 
     frameRGB = reFrame;
 
-    frameGray = im2gray(frameRGB); 
+    frameGray = rgb2gray(frameRGB); 
     
     flow = estimateFlow(opticFlow,frameGray);
-
     
     imshow(im)
     hold on
     
-    plot(flow,'DecimationFactor',[5 5],'ScaleFactor',2);
+    %Plot flow of whole video frame
+    %plot(flow,'DecimationFactor',[5 5],'ScaleFactor',2);
     
     pause(10^-3)
     %viscircles(center, radius,'EdgeColor','b');
@@ -71,29 +71,45 @@ while hasFrame(v)
         squareOrientation = flow.Orientation(rectForOptiFlow(2):rectForOptiFlow(2)+rectForOptiFlow(4), rectForOptiFlow(1):rectForOptiFlow(1)+rectForOptiFlow(3));
 
         % Calculate the average
+        % orientations goes from -pi to pi
         averageOrientation = mean2(squareOrientation);
 
         squareMagnitude = flow.Magnitude(rectForOptiFlow(2):rectForOptiFlow(2)+rectForOptiFlow(4), rectForOptiFlow(1):rectForOptiFlow(1)+rectForOptiFlow(3));
-
+        
         % Calculate the average
-        averageMagnitude = mean2(squareMagnitude);
+        % calculates so that vectors in opposite directons cancel
+        averageMagnitude = mean2(cos(squareOrientation).*squareMagnitude);
         
+        % We find the x and y magnitudes of the spin vector. We mutiply
+        % with 50 to get a more visible vector on the image. We use minus
+        % as these calculations are based on a standard coordinate system,
+        % but the coordinate system of the image has zero in top left and
+        % x/y increasing as we go down and to the right
+        vx = -averageMagnitude*cos(averageOrientation)*50;
+        vy = -averageMagnitude*cos(averageOrientation)*50;
         
+        %plot spin vector
+        quiver(center(1), center(2), vx, vy, 'LineWidth', 2);
+        
+        %plot of the circle
         plot(xunit,yunit, 1,3, 'r', 'LineWidth',3);
         plot(center(1),center(2),1,3, '.', 'MarkerSize', 5);
+        
 
         
     end
+    
+    
+    
+    
+    
+    
+    
      % Save the frame in structure for later saving to video file
     s(k) = getframe(h);
     k = k+1;
     hold off
    
-
-    
-
-   
-
 end
 v2 = VideoReader('Videos/slowmoCut2.mp4');
 figure
