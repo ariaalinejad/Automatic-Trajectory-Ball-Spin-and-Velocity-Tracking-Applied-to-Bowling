@@ -20,6 +20,7 @@ k = 1;
 movVector = zeros(nFrames,3);
 iter = 0;
 rectForOptiFlow = [0,0,0,0];
+optiFlowVec = zeros(nFrames,2); % One vector is orientation, the other is magnitude
 while hasFrame(v)
     reFrame = readFrame(v);
     iter = iter+1;
@@ -40,6 +41,8 @@ while hasFrame(v)
     frameGray = im2gray(frameRGB); 
     
     flow = estimateFlow(opticFlow,frameGray);
+
+    
     imshow(im)
     hold on
     
@@ -52,8 +55,34 @@ while hasFrame(v)
         th = 0:pi/50:2*pi;
         xunit = radius * cos(th) + center(1);
         yunit = radius * sin(th) + center(2);
+
+        %Define the rectangle in which we want to find the avg optical flow
+
+        rectForOptiFlow(1) = floor(center(1)-radius); %x init top left val
+        rectForOptiFlow(2) = floor(center(2)-radius); %y init val top left
+        rectForOptiFlow(3) = floor(2*radius); %how much to the right x will move
+        rectForOptiFlow(4) = floor(2*radius); %How much down the y will move
+        
+        %The above code creates a rectangle around the ball with r length
+        %from center at all sides. so really it is a square.
+
+        rectangle('Position', rectForOptiFlow);
+
+        squareOrientation = flow.Orientation(rectForOptiFlow(2):rectForOptiFlow(2)+rectForOptiFlow(4), rectForOptiFlow(1):rectForOptiFlow(1)+rectForOptiFlow(3));
+
+        % Calculate the average
+        averageOrientation = mean2(squareOrientation);
+
+        squareMagnitude = flow.Magnitude(rectForOptiFlow(2):rectForOptiFlow(2)+rectForOptiFlow(4), rectForOptiFlow(1):rectForOptiFlow(1)+rectForOptiFlow(3));
+
+        % Calculate the average
+        averageMagnitude = mean2(squareMagnitude);
+        
+        
         plot(xunit,yunit, 1,3, 'r', 'LineWidth',3);
         plot(center(1),center(2),1,3, '.', 'MarkerSize', 5);
+
+        
     end
      % Save the frame in structure for later saving to video file
     s(k) = getframe(h);
@@ -90,3 +119,15 @@ for k = 1:numel(s)
     writeVideo(vOut,s(k))
 end
 close(vOut)
+
+
+
+% Need to estimate the spin from the flow variable. 
+% Idea: Look in the area inside the circle radius
+% Use trigonometry of some sort to find the spin for a certain point in the
+% circle. Maybe we just need to sum all the magnitude and orientation
+% vectors.
+
+% De andre tar bare average orientation og magnitude i sirkelområdet. så da
+% må vi bare gjøre det.
+% Bør gjøre per frame.
