@@ -22,6 +22,7 @@ iter = 0;
 rectForOptiFlow = [0,0,0,0];
 optiFlowVec = zeros(nFrames,2); % One vector is orientation, the other is magnitude
 while hasFrame(v)
+    
     reFrame = readFrame(v);
     iter = iter+1;
     im = reFrame;
@@ -67,18 +68,34 @@ while hasFrame(v)
         %from center at all sides. so really it is a square.
 
         rectangle('Position', rectForOptiFlow);
+        
+        
+        %Make a binary mask of the ball and take out indexes
+        mask = zeros([size(im,1), size(im,2)]);
+        for r=1:(radius/1.5) %look at a smaller part so that values are more dependent on spin and less on velocity
+            th = 0:pi/50:2*pi;
+            xunit = r * cos(th) + center(1);
+            yunit = r * sin(th) + center(2);
 
-        squareOrientation = flow.Orientation(rectForOptiFlow(2):rectForOptiFlow(2)+rectForOptiFlow(4), rectForOptiFlow(1):rectForOptiFlow(1)+rectForOptiFlow(3));
+            for i=1:length(xunit)
+                mask(round(yunit(i)),round(xunit(i))) = 1;
+            end
+            SE = [1 1 1; 1 1 1; 1 1 1];
+            mask = imclose(mask, SE);
+            [x_idx, y_idx] = find(mask == 1);
+        end
+
+        squareOrientation = flow.Orientation(x_idx', y_idx');%squareOrientation = flow.Orientation(rectForOptiFlow(2):rectForOptiFlow(2)+rectForOptiFlow(4), rectForOptiFlow(1):rectForOptiFlow(1)+rectForOptiFlow(3));
 
         % Calculate the average
         % orientations goes from -pi to pi
         averageOrientation = mean2(squareOrientation);
 
-        squareMagnitude = flow.Magnitude(rectForOptiFlow(2):rectForOptiFlow(2)+rectForOptiFlow(4), rectForOptiFlow(1):rectForOptiFlow(1)+rectForOptiFlow(3));
+        squareMagnitude = flow.Magnitude(x_idx',y_idx');%squareMagnitude = flow.Magnitude(rectForOptiFlow(2):rectForOptiFlow(2)+rectForOptiFlow(4), rectForOptiFlow(1):rectForOptiFlow(1)+rectForOptiFlow(3));
         
         % Calculate the average
         % calculates so that vectors in opposite directons cancel
-        averageMagnitude = mean2(cos(squareOrientation).*squareMagnitude);
+        averageMagnitude = abs(mean2(cos(squareOrientation).*squareMagnitude));
         
         % We find the x and y magnitudes of the spin vector. We mutiply
         % with 50 to get a more visible vector on the image. We use minus
@@ -95,7 +112,20 @@ while hasFrame(v)
         plot(xunit,yunit, 1,3, 'r', 'LineWidth',3);
         plot(center(1),center(2),1,3, '.', 'MarkerSize', 5);
         
-
+        
+        v_spin = ((averageMagnitude*v.FrameRate*0.12)/radius);
+        rpm_spin = (v_spin*60)/(0.12*2*pi);
+        % we take 180 + deg since the image coordinate system is different
+        % form the cartesian we are used to
+        dir_spin = 90 - (averageOrientation/pi)*180;  
+        
+        v_spin_text = sprintf('Spin velocity: %.2f [RPM] (%.4f [m/s])',rpm_spin, v_spin);
+        dir_spin_text = sprintf('Spin direction: %.1f degrees',dir_spin);
+        
+        rectangle('Position',[10,5,400,55], 'FaceColor', [1 1 1],'EdgeColor','k'); 
+        
+        text(20, 20, v_spin_text, 'FontSize', 12, 'Color', 'k')
+        text(20, 40, dir_spin_text, 'FontSize', 12, 'Color', 'k')
         
     end
     
@@ -135,7 +165,6 @@ for k = 1:numel(s)
     writeVideo(vOut,s(k))
 end
 close(vOut)
-
 
 
 % Need to estimate the spin from the flow variable. 
