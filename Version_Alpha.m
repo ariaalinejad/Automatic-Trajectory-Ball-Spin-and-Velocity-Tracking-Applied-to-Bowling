@@ -1,6 +1,7 @@
 clc;close all;clear all;
 % Access video file
-v = VideoReader('Videos/slowmoCut2.mp4');
+%v = VideoReader('Videos/Aria_1.MOV');
+v = VideoReader('IMG_0923.MOV');
 opticFlow_v = opticalFlowFarneback;
 opticFlow_s = opticalFlowFarneback;
 h = figure();
@@ -28,6 +29,17 @@ iter = 0;
 rectForOptiFlow = [0,0,0,0];
 optiFlowVec = zeros(nFrames,2); % One vector is orientation, the other is magnitude
 initSize = 0;
+% Set initial textbox values
+v_ball_text = sprintf('Velocity: - [m/s]');
+dir_ball_text = sprintf('Direction: - degrees');
+v_spin_text = sprintf('Spin velocity: - [RPM] (- [m/s])');
+dir_spin_text = sprintf('Spin Direction: - degrees');
+
+% Parameters
+MaxRadius = 60;
+MinRadius = 5;
+slowMotionFactor = 8;
+
 while hasFrame(v)
     reFrame = readFrame(v);
     iter = iter+1;
@@ -35,8 +47,16 @@ while hasFrame(v)
     imshow(im)
     hold on
     
+    % Plot the previous spin and velocity data
+    rectangle('Position',[1+initSize*2,1,size(im,2),1+initSize*2], 'FaceColor', [1 1 1],'EdgeColor','k'); 
+    text(1+initSize*2, 10, v_ball_text, 'FontSize', 8, 'Color', 'k')
+    text(1+initSize*2, 30, dir_ball_text, 'FontSize', 8, 'Color', 'k')
+    text(1+initSize*2, 50, v_spin_text, 'FontSize', 8, 'Color', 'k')
+    text(1+initSize*2, 70, dir_spin_text, 'FontSize', 8, 'Color', 'k')
+    
+    
     % Use hough transform to find circles (darker then the background)
-    [centers, radii, metric] = imfindcircles(histeq(im),[10 150], 'ObjectPolarity','dark');
+    [centers, radii, metric] = imfindcircles(histeq(im),[MinRadius MaxRadius], 'ObjectPolarity','dark');
     % Keep the best circle
     [val, idx] = max(metric);
     center = centers(idx,:);
@@ -57,12 +77,17 @@ while hasFrame(v)
         if (initSize == 0)
             initSize=floor(radius);
         end
+        try
         imball = im(floor(center(2))-initSize:floor(center(2))+initSize, floor(center(1))-initSize:floor(center(1))+initSize, :);%im(floor(center(1))-initSize:floor(center(1))+initSize, floor(center(2))-initSize:floor(center(2))+initSize, :);
         imshow(imball); % Show region used for spin flow in upper right
         
         % Find and plot the spin flow
         flow_s = estimateFlow(opticFlow_s,rgb2gray(imball));
         plot(flow_s,'DecimationFactor',[5 5],'ScaleFactor',2);
+        catch
+            imball = 0;
+            flow_s = 0;
+        end
 
         %Define the rectangle around the ball
         rectForOptiFlow(1) = floor(center(1)-radius); %x init top left val
@@ -76,17 +101,21 @@ while hasFrame(v)
         
         %Make a binary mask of the ball and take out indecies
         mask = zeros([size(im,1), size(im,2)]);
-        for r=1:(radius) %look at a smaller part so that values are more dependent on spin and less on velocity
-            th = 0:pi/50:2*pi;
-            xunit = r * cos(th) + center(1);
-            yunit = r * sin(th) + center(2);
+        try
+            for r=1:radius 
+                th = 0:pi/50:2*pi;
+                xunit = r * cos(th) + center(1);
+                yunit = r * sin(th) + center(2);
 
-            for i=1:length(xunit)
-                mask(round(yunit(i)),round(xunit(i))) = 1;
+                for i=1:length(xunit)
+                    mask(round(yunit(i)),round(xunit(i))) = 1;
+                end
+                SE = [1 1 1; 1 1 1; 1 1 1];
+                mask = imclose(mask, SE);
+                [x_idx, y_idx] = find(mask == 1);
             end
-            SE = [1 1 1; 1 1 1; 1 1 1];
-            mask = imclose(mask, SE);
-            [x_idx, y_idx] = find(mask == 1);
+        catch
+            mask = ones(size(im));
         end
         
         %--------Find avg velocity vector--------------
@@ -103,13 +132,14 @@ while hasFrame(v)
         averageOrientation_v = atan(avg_vy/avg_vx);  
         
         % -------Calculate the velocity and direction of the ball--------
-        v_ball= ((averageMagnitude_v*v.FrameRate*0.12)/radius);
+        v_ball= ((averageMagnitude_v*v.FrameRate*0.12)/radius)*slowMotionFactor;
         
         % Use - to get the make the positive angular direction the same as
         % we are used to
         dir_ball = -(averageOrientation_v/pi)*180;  
         
         %--------Find avg spin vector--------------
+        try
         % Only use the flow present in the ball (values have to be adjusted wrt. the changed image dimentions)
         x_idx = x_idx - (floor(center(2))-initSize);
         y_idx = y_idx - (floor(center(1))-initSize);
@@ -118,6 +148,10 @@ while hasFrame(v)
         y_idx(y_idx < 1) = 1;y_idx(y_idx > initSize*2-1) = initSize*2+1;
         squareOrientation_s = flow_s.Orientation(x_idx', y_idx');
         squareMagnitude_s = flow_s.Magnitude(x_idx', y_idx');
+        catch
+            squareOrientation_s = 0;
+            squareMagnitude_s = 0;
+        end
         
         % We find the x and y components of the average vectors 
         avg_sx = mean2(cos(squareOrientation_s).*squareMagnitude_s);
@@ -128,7 +162,7 @@ while hasFrame(v)
         averageOrientation_s = atan(avg_sy/avg_sx);  
         
         % -------Calculate the amplitude and direction of the ball spin--------
-        v_spin= ((averageMagnitude_s*v.FrameRate*0.12)/radius);
+        v_spin= ((averageMagnitude_s*v.FrameRate*0.12)/radius)*slowMotionFactor;
         rpm_spin = (v_spin*60)/(0.12*2*pi); %use these calculations later
         
         % Use - to get the make the positive angular direction the same as
@@ -145,25 +179,23 @@ while hasFrame(v)
         plot(center(1),center(2),1,3, '.', 'MarkerSize', 5);
         
         %plot velocity vector
-        quiver(center(1), center(2), avg_vx*30, avg_vy*30, 'LineWidth', 2);
+        quiver(center(1), center(2), avg_vx*20, avg_vy*20, 'LineWidth', 2);
         %plot spin vector
-        quiver(center(1), center(2), avg_sx*30, avg_sy*30, 'LineWidth', 2);
+        quiver(center(1), center(2), avg_sx*20, avg_sy*20, 'LineWidth', 2);
         
         % Plot a box with the magnitude and orientation of the velocity
         % vector
         v_ball_text = sprintf('Velocity: %.4f [m/s]', v_ball);
         dir_ball_text = sprintf('Direction: %.1f degrees',dir_ball);
-        rectangle('Position',[80,2,150,30], 'FaceColor', [1 1 1],'EdgeColor','k'); 
-        text(90, 10, v_ball_text, 'FontSize', 12, 'Color', 'k')
-        text(90, 20, dir_ball_text, 'FontSize', 12, 'Color', 'k')
+        %text(1+initSize*2, 2, v_ball_text, 'FontSize', 12, 'Color', 'k')
+        %text(1+initSize*2, 20, dir_ball_text, 'FontSize', 12, 'Color', 'k')
         
         % Plot a box with the magnitude and orientation of the spin
         % vector
         v_spin_text = sprintf('Spin velocity: %.2f [RPM] (%.4f [m/s])',rpm_spin, v_ball);
         dir_spin_text = sprintf('Spin Direction: %.1f degrees',dir_ball);
-        rectangle('Position',[250,2,200,30], 'FaceColor', [1 1 1],'EdgeColor','k'); 
-        text(260, 10, v_spin_text, 'FontSize', 12, 'Color', 'k')
-        text(260, 20, dir_spin_text, 'FontSize', 12, 'Color', 'k')
+        %text(1+initSize*2, 40, v_spin_text, 'FontSize', 12, 'Color', 'k')
+        %text(1+initSize*2, 60, dir_spin_text, 'FontSize', 12, 'Color', 'k')
     elseif(iter>1)
         % record the movement of the center and radius
         % if no circle is detected record the previous value over
