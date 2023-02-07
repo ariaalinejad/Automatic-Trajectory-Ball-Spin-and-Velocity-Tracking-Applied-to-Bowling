@@ -1,18 +1,21 @@
 clc;close all;clear all;
 % Access video file
-%v = VideoReader('Videos/Aria_1.MOV');
-v = VideoReader('IMG_0923.MOV');
+v = VideoReader('Videos/Aria_1.MOV');
+%v = VideoReader('IMG_0923.MOV');
 opticFlow_v = opticalFlowFarneback;
 opticFlow_s = opticalFlowFarneback;
-h = figure();
-movegui(h);
+
 
 % Choose part of video
 im = read(v,1);
 disp('Select the region of the image you want to analyze')
 [J, rect] = imcrop(im);
 rect = floor(rect);
-figure;imshow(J);
+%figure;
+
+h = figure();
+movegui(h);
+imshow(J);
 
 
 % Preallocate structure to store video frames
@@ -120,8 +123,13 @@ while hasFrame(v)
         
         %--------Find avg velocity vector--------------
         % Only use the flow present in the ball
+        try 
         squareOrientation_v = flow_v.Orientation(x_idx', y_idx');%squareOrientation = flow.Orientation(rectForOptiFlow(2):rectForOptiFlow(2)+rectForOptiFlow(4), rectForOptiFlow(1):rectForOptiFlow(1)+rectForOptiFlow(3));
         squareMagnitude_v = flow_v.Magnitude(x_idx',y_idx');%squareMagnitude = flow.Magnitude(rectForOptiFlow(2):rectForOptiFlow(2)+rectForOptiFlow(4), rectForOptiFlow(1):rectForOptiFlow(1)+rectForOptiFlow(3));
+        catch % if part of the ball is outside frame, simply use all values
+            squareOrientation_v = flow_v.Orientation;
+            squareMagnitude_v = flow_v.Magnitude;
+        end
         
         % We find the x and y components of the average vectors 
         avg_vx = mean2(cos(squareOrientation_v).*squareMagnitude_v);
@@ -136,7 +144,7 @@ while hasFrame(v)
         
         % Use - to get the make the positive angular direction the same as
         % we are used to
-        dir_ball = -(averageOrientation_v/pi)*180;  
+        dir_ball = (averageOrientation_v/pi)*180;  
         
         %--------Find avg spin vector--------------
         try
@@ -148,7 +156,7 @@ while hasFrame(v)
         y_idx(y_idx < 1) = 1;y_idx(y_idx > initSize*2-1) = initSize*2+1;
         squareOrientation_s = flow_s.Orientation(x_idx', y_idx');
         squareMagnitude_s = flow_s.Magnitude(x_idx', y_idx');
-        catch
+        catch % assume error in choosing frame around ball, and set to zero
             squareOrientation_s = 0;
             squareMagnitude_s = 0;
         end
@@ -167,7 +175,7 @@ while hasFrame(v)
         
         % Use - to get the make the positive angular direction the same as
         % we are used to
-        dir_spin = -(averageOrientation_s/pi)*180;  
+        dir_spin = (averageOrientation_s/pi)*180;  
         
         % ----------PLOTS-----------
         %plot of the circle
@@ -187,15 +195,11 @@ while hasFrame(v)
         % vector
         v_ball_text = sprintf('Velocity: %.4f [m/s]', v_ball);
         dir_ball_text = sprintf('Direction: %.1f degrees',dir_ball);
-        %text(1+initSize*2, 2, v_ball_text, 'FontSize', 12, 'Color', 'k')
-        %text(1+initSize*2, 20, dir_ball_text, 'FontSize', 12, 'Color', 'k')
         
         % Plot a box with the magnitude and orientation of the spin
         % vector
-        v_spin_text = sprintf('Spin velocity: %.2f [RPM] (%.4f [m/s])',rpm_spin, v_ball);
-        dir_spin_text = sprintf('Spin Direction: %.1f degrees',dir_ball);
-        %text(1+initSize*2, 40, v_spin_text, 'FontSize', 12, 'Color', 'k')
-        %text(1+initSize*2, 60, dir_spin_text, 'FontSize', 12, 'Color', 'k')
+        v_spin_text = sprintf('Spin velocity: %.2f [RPM] (%.4f [m/s])',rpm_spin, v_spin);
+        dir_spin_text = sprintf('Spin Direction: %.1f degrees',dir_spin);
     elseif(iter>1)
         % record the movement of the center and radius
         % if no circle is detected record the previous value over
@@ -208,16 +212,16 @@ while hasFrame(v)
      % Save the frame in structure for later saving to video file
     s(k) = getframe(h);
     k = k+1;
-    hold off
+    %hold off
    
 end
 v2 = VideoReader('Videos/slowmoCut2.mp4');
-%figure;
-%imshow(readFrame(v2))
-%hold on
-%plot(movVector(:,1),movVector(:,2),'r-o','LineWidth',2);
-%legend('Measured trajectory');
-%hold off
+figure;
+imshow(readFrame(v2))
+hold on
+plot(movVector(:,1),movVector(:,2),'r-o','LineWidth',2);
+legend('Measured trajectory');
+hold off
 % Remove any unused structure array elements
 s(k:end) = [];
 
@@ -335,4 +339,3 @@ legend_str{2} = 'Side line';
 legend_str{3} = 'Measured trajectory';
 legend(legend_str);
 hold off
-
