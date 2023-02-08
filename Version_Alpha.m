@@ -141,6 +141,7 @@ while hasFrame(v)
         
         % -------Calculate the velocity and direction of the ball--------
         v_ball= ((averageMagnitude_v*v.FrameRate*0.12)/radius)*slowMotionFactor;
+        v_ball = v_ball / 0.2588190451; # cos(75 degrees) division
         
         % Use - to get the make the positive angular direction the same as
         % we are used to
