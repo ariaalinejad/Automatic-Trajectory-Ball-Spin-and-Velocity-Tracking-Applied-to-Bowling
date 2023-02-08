@@ -1,22 +1,44 @@
 clc;close all;clear all;
 % Access video file
+%v = VideoReader('Videos/Thomas_2.mp4');
 v = VideoReader('Videos/Aria_1.MOV');
 %v = VideoReader('IMG_0923.MOV');
-opticFlow_v = opticalFlowFarneback;
-opticFlow_s = opticalFlowFarneback;
 
 
-% Choose part of video
-im = read(v,1);
+
+% Choose frame of video
+im = read(v,600);
 disp('Select the region of the image you want to analyze')
 [J, rect] = imcrop(im);
 rect = floor(rect);
-%figure;
-
-h = figure();
-movegui(h);
 imshow(J);
 
+%---------Select region we are interested in (the lane)----------
+disp('Select points, then press enter');
+[xi, yi] = getpts;
+hold on
+% plot the lines
+plot([xi(1) xi(2)], [yi(1), yi(2)], 'r', 'linewidth', 5);
+plot([xi(2) xi(3)], [yi(2), yi(3)], 'r', 'linewidth', 5);
+plot([xi(3) xi(4)], [yi(3), yi(4)], 'r', 'linewidth', 5);
+plot([xi(4) xi(1)], [yi(4), yi(1)], 'r', 'linewidth', 5);
+lane_x = [xi(1), xi(2), xi(3), xi(4)];
+lane_y = [yi(1), yi(2), yi(3), yi(4)];
+
+A= roipoly(J,lane_x,lane_y); % x and y are the x and y coordinates of the vertices of the polygon 
+A = bwareafilt(A,1); 
+A = bwconvhull(A); 
+croppedImg = immultiply(J,repmat(A,[1 1 3])); 
+imshow(croppedImg);
+
+
+
+%%
+
+% Define figure and starting frame
+h = figure();
+movegui(h);
+im = read(v,10);
 
 % Preallocate structure to store video frames
 % Note that this is just an initial guess for preallocation based on
@@ -37,10 +59,13 @@ v_ball_text = sprintf('Velocity: - [m/s]');
 dir_ball_text = sprintf('Direction: - degrees');
 v_spin_text = sprintf('Spin velocity: - [RPM] (- [m/s])');
 dir_spin_text = sprintf('Spin Direction: - degrees');
+% Define Optical flow variables
+opticFlow_v = opticalFlowFarneback;
+opticFlow_s = opticalFlowFarneback;
 
 % Parameters
-MaxRadius = 60;
-MinRadius = 5;
+MaxRadius = 60; % Found from testing
+MinRadius = 7;
 slowMotionFactor = 8;
 
 while hasFrame(v)
@@ -50,6 +75,9 @@ while hasFrame(v)
     imshow(im)
     hold on
     
+    % Only look at are of image where the lane is
+    imCrop = immultiply(im,repmat(A,[1 1 3]));
+    
     % Plot the previous spin and velocity data
     rectangle('Position',[1+initSize*2,1,size(im,2),1+initSize*2], 'FaceColor', [1 1 1],'EdgeColor','k'); 
     text(1+initSize*2, 10, v_ball_text, 'FontSize', 8, 'Color', 'k')
@@ -57,16 +85,17 @@ while hasFrame(v)
     text(1+initSize*2, 50, v_spin_text, 'FontSize', 8, 'Color', 'k')
     text(1+initSize*2, 70, dir_spin_text, 'FontSize', 8, 'Color', 'k')
     
-    
+    %MinRadiusN = round(MinRadius*((v.NumFrames-iter)/(v.NumFrames)));
+    %MaxRadiusN = round(MaxRadius*((v.NumFrames-iter)/(v.NumFrames)));
     % Use hough transform to find circles (darker then the background)
-    [centers, radii, metric] = imfindcircles(histeq(im),[MinRadius MaxRadius], 'ObjectPolarity','dark');
+    [centers, radii, metric] = imfindcircles(adapthisteq(rgb2gray(imCrop)),[MinRadius MaxRadius], 'ObjectPolarity','dark');
     % Keep the best circle
     [val, idx] = max(metric);
     center = centers(idx,:);
     radius = radii(idx);
     
     % Estimate the flow on the image
-    flow_v = estimateFlow(opticFlow_v,rgb2gray(im));
+    flow_v = estimateFlow(opticFlow_v,rgb2gray(imCrop));
     
     
     pause(10^-3)
@@ -80,6 +109,7 @@ while hasFrame(v)
         if (initSize == 0)
             initSize=floor(radius);
         end
+        
         try
         imball = im(floor(center(2))-initSize:floor(center(2))+initSize, floor(center(1))-initSize:floor(center(1))+initSize, :);%im(floor(center(1))-initSize:floor(center(1))+initSize, floor(center(2))-initSize:floor(center(2))+initSize, :);
         imshow(imball); % Show region used for spin flow in upper right
@@ -88,7 +118,6 @@ while hasFrame(v)
         flow_s = estimateFlow(opticFlow_s,rgb2gray(imball));
         plot(flow_s,'DecimationFactor',[5 5],'ScaleFactor',2);
         catch
-            imball = 0;
             flow_s = 0;
         end
 
@@ -124,12 +153,13 @@ while hasFrame(v)
         %--------Find avg velocity vector--------------
         % Only use the flow present in the ball
         try 
-        squareOrientation_v = flow_v.Orientation(x_idx', y_idx');%squareOrientation = flow.Orientation(rectForOptiFlow(2):rectForOptiFlow(2)+rectForOptiFlow(4), rectForOptiFlow(1):rectForOptiFlow(1)+rectForOptiFlow(3));
-        squareMagnitude_v = flow_v.Magnitude(x_idx',y_idx');%squareMagnitude = flow.Magnitude(rectForOptiFlow(2):rectForOptiFlow(2)+rectForOptiFlow(4), rectForOptiFlow(1):rectForOptiFlow(1)+rectForOptiFlow(3));
+            %squareOrientation_v = flow_v.Orientation(x_idx', y_idx');%squareOrientation = flow.Orientation(rectForOptiFlow(2):rectForOptiFlow(2)+rectForOptiFlow(4), rectForOptiFlow(1):rectForOptiFlow(1)+rectForOptiFlow(3));
+            %squareMagnitude_v = flow_v.Magnitude(x_idx',y_idx');%squareMagnitude = flow.Magnitude(rectForOptiFlow(2):rectForOptiFlow(2)+rectForOptiFlow(4), rectForOptiFlow(1):rectForOptiFlow(1)+rectForOptiFlow(3));
         catch % if part of the ball is outside frame, simply use all values
             squareOrientation_v = flow_v.Orientation;
             squareMagnitude_v = flow_v.Magnitude;
         end
+        
         
         % We find the x and y components of the average vectors 
         avg_vx = mean2(cos(squareOrientation_v).*squareMagnitude_v);
@@ -141,7 +171,7 @@ while hasFrame(v)
         
         % -------Calculate the velocity and direction of the ball--------
         v_ball= ((averageMagnitude_v*v.FrameRate*0.12)/radius)*slowMotionFactor;
-        v_ball = v_ball / 0.2588190451; # cos(75 degrees) division
+        v_ball = v_ball/0.2588190451; % cos(75 degrees) division
         
         % Use - to get the make the positive angular direction the same as
         % we are used to
@@ -149,22 +179,27 @@ while hasFrame(v)
         
         %--------Find avg spin vector--------------
         try
-        % Only use the flow present in the ball (values have to be adjusted wrt. the changed image dimentions)
-        x_idx = x_idx - (floor(center(2))-initSize);
-        y_idx = y_idx - (floor(center(1))-initSize);
-        % In case parts of the ball are outside of the box we are looking at index is set to zero
-        x_idx(x_idx < 1) = 1;x_idx(x_idx > initSize*2-1) = initSize*2+1;
-        y_idx(y_idx < 1) = 1;y_idx(y_idx > initSize*2-1) = initSize*2+1;
-        squareOrientation_s = flow_s.Orientation(x_idx', y_idx');
-        squareMagnitude_s = flow_s.Magnitude(x_idx', y_idx');
+            % Only use the flow present in the ball (values have to be adjusted wrt. the changed image dimentions)
+            x_idx = x_idx - (floor(center(2))-initSize);
+            y_idx = y_idx - (floor(center(1))-initSize);
+            % In case parts of the ball are outside of the box we are looking at index is set to zero
+            x_idx(x_idx < 1) = 1;x_idx(x_idx > initSize*2-1) = initSize*2+1;
+            y_idx(y_idx < 1) = 1;y_idx(y_idx > initSize*2-1) = initSize*2+1;
+            Vx_s= flow_s.Vx(x_idx', y_idx');%squareOrientation_s = flow_s.Orientation(x_idx', y_idx');
+            Vy_s = flow_s.Vy(x_idx', y_idx');%squareMagnitude_s = flow_s.Magnitude(x_idx', y_idx');
         catch % assume error in choosing frame around ball, and set to zero
-            squareOrientation_s = 0;
-            squareMagnitude_s = 0;
+            Vx_s = 0;%squareOrientation_s = 0;
+            Vy_s = 0;%squareMagnitude_s = 0;
         end
         
+        % ----------------jobber her!
+        %[NewsquareMagnitude_s] = maxk(squareMagnitude_s, 10, 1);
+        %[NewNewsquareMagnitude_s, m_I] = maxk(NewsquareMagnitude_s, 10, 2);
+        %NewsquareOrientation_s = -squareOrientation_s(m_I);
+        
         % We find the x and y components of the average vectors 
-        avg_sx = mean2(cos(squareOrientation_s).*squareMagnitude_s);
-        avg_sy = mean2(sin(squareOrientation_s).*squareMagnitude_s);
+        avg_sx = mean2(Vx_s);%mean2(cos(NewsquareOrientation_s).*NewNewsquareMagnitude_s);
+        avg_sy = mean2(Vy_s);%mean2(sin(NewsquareOrientation_s).*NewNewsquareMagnitude_s);
         
         % Find the direction and magnitude of the average vector
         averageMagnitude_s = sqrt(avg_sx^2 + avg_sy^2);
@@ -213,16 +248,20 @@ while hasFrame(v)
      % Save the frame in structure for later saving to video file
     s(k) = getframe(h);
     k = k+1;
-    %hold off
+    hold off
    
 end
-v2 = VideoReader('Videos/slowmoCut2.mp4');
+
+v2 = VideoReader('Videos/Aria_1.MOV');
+v2 = readFrame(v2);
 figure;
-imshow(readFrame(v2))
+imshow(v2(rect(2):rect(2)+rect(4), rect:rect(1)+rect(3), :))
 hold on
 plot(movVector(:,1),movVector(:,2),'r-o','LineWidth',2);
 legend('Measured trajectory');
 hold off
+
+
 % Remove any unused structure array elements
 s(k:end) = [];
 
