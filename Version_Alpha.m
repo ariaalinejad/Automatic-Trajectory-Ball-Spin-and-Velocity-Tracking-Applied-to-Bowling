@@ -38,7 +38,7 @@ imshow(croppedImg);
 % Define figure and starting frame
 h = figure();
 movegui(h);
-im = read(v,10);
+im = read(v,50);
 
 % Preallocate structure to store video frames
 % Note that this is just an initial guess for preallocation based on
@@ -153,29 +153,37 @@ while hasFrame(v)
         %--------Find avg velocity vector--------------
         % Only use the flow present in the ball
         try 
-            %squareOrientation_v = flow_v.Orientation(x_idx', y_idx');%squareOrientation = flow.Orientation(rectForOptiFlow(2):rectForOptiFlow(2)+rectForOptiFlow(4), rectForOptiFlow(1):rectForOptiFlow(1)+rectForOptiFlow(3));
-            %squareMagnitude_v = flow_v.Magnitude(x_idx',y_idx');%squareMagnitude = flow.Magnitude(rectForOptiFlow(2):rectForOptiFlow(2)+rectForOptiFlow(4), rectForOptiFlow(1):rectForOptiFlow(1)+rectForOptiFlow(3));
+            Vx_v = flow_v.Vx(x_idx', y_idx');
+            Vy_v = flow_v.Vy(x_idx', y_idx');
         catch % if part of the ball is outside frame, simply use all values
-            squareOrientation_v = flow_v.Orientation;
-            squareMagnitude_v = flow_v.Magnitude;
+            Vx_v = flow_v.Vx;
+            Vy_v = flow_v.Vy;
         end
         
         
         % We find the x and y components of the average vectors 
-        avg_vx = mean2(cos(squareOrientation_v).*squareMagnitude_v);
-        avg_vy = mean2(sin(squareOrientation_v).*squareMagnitude_v);
+        avg_vx = mean2(Vx_v);
+        avg_vy = mean2(Vy_v);
         
         % Find the direction and magnitude of the average vector
         averageMagnitude_v = sqrt(avg_vx^2 + avg_vy^2);
-        averageOrientation_v = atan(avg_vy/avg_vx);  
+        
+        % Change axis so that they are as we are used to
+        if(avg_vx>0 && avg_vy>0)
+            averageOrientation_v =  atan(avg_vy/avg_vx);
+        elseif (avg_vx<0 && avg_vy>0)
+            averageOrientation_v =  pi - atan(avg_vy/(-avg_vx));
+        elseif (avg_vx<0 && avg_vy<0)
+            averageOrientation_v =   pi + atan((-avg_vy)/(-avg_vx));
+        elseif (avg_vx>0 && avg_vy<0)
+            averageOrientation_v =  2*pi - atan((-avg_vy)/(avg_vx));
+        end
+        averageOrientation_v = 2*pi - averageOrientation_v;
+        dir_ball = (averageOrientation_v/pi)*180; 
         
         % -------Calculate the velocity and direction of the ball--------
         v_ball= ((averageMagnitude_v*v.FrameRate*0.12)/radius)*slowMotionFactor;
         v_ball = v_ball/0.2588190451; % cos(75 degrees) division
-        
-        % Use - to get the make the positive angular direction the same as
-        % we are used to
-        dir_ball = (averageOrientation_v/pi)*180;  
         
         %--------Find avg spin vector--------------
         try
@@ -185,33 +193,43 @@ while hasFrame(v)
             % In case parts of the ball are outside of the box we are looking at index is set to zero
             x_idx(x_idx < 1) = 1;x_idx(x_idx > initSize*2-1) = initSize*2+1;
             y_idx(y_idx < 1) = 1;y_idx(y_idx > initSize*2-1) = initSize*2+1;
-            Vx_s= flow_s.Vx(x_idx', y_idx');%squareOrientation_s = flow_s.Orientation(x_idx', y_idx');
-            Vy_s = flow_s.Vy(x_idx', y_idx');%squareMagnitude_s = flow_s.Magnitude(x_idx', y_idx');
+            Vx_s= flow_s.Vx(x_idx', y_idx');
+            Vy_s = flow_s.Vy(x_idx', y_idx');
         catch % assume error in choosing frame around ball, and set to zero
-            Vx_s = 0;%squareOrientation_s = 0;
-            Vy_s = 0;%squareMagnitude_s = 0;
+            Vx_s = 0;
+            Vy_s = 0;
         end
         
-        % ----------------jobber her!
-        %[NewsquareMagnitude_s] = maxk(squareMagnitude_s, 10, 1);
-        %[NewNewsquareMagnitude_s, m_I] = maxk(NewsquareMagnitude_s, 10, 2);
-        %NewsquareOrientation_s = -squareOrientation_s(m_I);
+        % Only use the highest (most prominant spin values in the calculation)
+        NewsquareMagnitude_s = maxk(squareMagnitude_s, 10, 1);
+        [~, m_I] = maxk(NewsquareMagnitude_s, 10, 2);
+        Vx_s_m = Vx_s(m_I);
+        Vy_s_m = Vy_s(m_I);
         
         % We find the x and y components of the average vectors 
-        avg_sx = mean2(Vx_s);%mean2(cos(NewsquareOrientation_s).*NewNewsquareMagnitude_s);
-        avg_sy = mean2(Vy_s);%mean2(sin(NewsquareOrientation_s).*NewNewsquareMagnitude_s);
+        avg_sx = mean2(Vx_s_m);
+        avg_sy = mean2(Vy_s_m);
         
         % Find the direction and magnitude of the average vector
         averageMagnitude_s = sqrt(avg_sx^2 + avg_sy^2);
-        averageOrientation_s = atan(avg_sy/avg_sx);  
+        
+        % Change axis so that they are as we are used to
+        if(avg_sx>0 && avg_sy>0)
+            averageOrientation_s =  atan(avg_sy/avg_sx);
+        elseif (avg_sx<0 && avg_sy>0)
+            averageOrientation_s =  pi - atan(avg_sy/(-avg_sx));
+        elseif (avg_sx<0 && avg_sy<0)
+            averageOrientation_s =   pi + atan((-avg_sy)/(-avg_sx));
+        elseif (avg_sx>0 && avg_sy<0)
+            averageOrientation_s =  2*pi - atan((-avg_sy)/(avg_sx));
+        end
+        averageOrientation_s = 2*pi - averageOrientation_s;
+        dir_spin = (averageOrientation_s/pi)*180;  
         
         % -------Calculate the amplitude and direction of the ball spin--------
         v_spin= ((averageMagnitude_s*v.FrameRate*0.12)/radius)*slowMotionFactor;
         rpm_spin = (v_spin*60)/(0.12*2*pi); %use these calculations later
         
-        % Use - to get the make the positive angular direction the same as
-        % we are used to
-        dir_spin = (averageOrientation_s/pi)*180;  
         
         % ----------PLOTS-----------
         %plot of the circle
@@ -224,6 +242,7 @@ while hasFrame(v)
         
         %plot velocity vector
         quiver(center(1), center(2), avg_vx*20, avg_vy*20, 'LineWidth', 2);
+        %quiver(center(1), center(2), -20, -20, 'LineWidth', 2);
         %plot spin vector
         quiver(center(1), center(2), avg_sx*20, avg_sy*20, 'LineWidth', 2);
         
