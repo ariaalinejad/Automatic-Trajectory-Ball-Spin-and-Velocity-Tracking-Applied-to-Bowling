@@ -1,16 +1,18 @@
 clc;close all;clear all;
 % Access video file
-%v = VideoReader('Videos/Thomas_2.mp4');
 v = VideoReader('Videos/Aria_1.MOV');
 %v = VideoReader('IMG_0923.MOV');
 
-
-
 % Choose frame of video
 im = read(v,600);
-disp('Select the region of the image you want to analyze')
-[J, rect] = imcrop(im);
-rect = floor(rect);
+
+%------We set these values maually during testing to save time----
+%disp('Select the region of the image you want to analyze')
+%[J, rect] = imcrop(im);
+%rect = floor(rect);
+J = im(170:170+860, 600:600+709, :);
+rect = [600,170,709,860];
+
 imshow(J);
 
 %---------Select region we are interested in (the lane)----------
@@ -31,14 +33,12 @@ A = bwconvhull(A);
 croppedImg = immultiply(J,repmat(A,[1 1 3])); 
 imshow(croppedImg);
 
-
-
 %%
 
 % Define figure and starting frame
 h = figure();
 movegui(h);
-im = read(v,50);
+im = read(v,1);
 
 % Preallocate structure to store video frames
 % Note that this is just an initial guess for preallocation based on
@@ -71,7 +71,7 @@ slowMotionFactor = 8;
 while hasFrame(v)
     reFrame = readFrame(v);
     iter = iter+1;
-    im = reFrame(rect(2):rect(2)+rect(4), rect:rect(1)+rect(3), :);
+    im = reFrame(rect(2):rect(2)+rect(4), rect(1):rect(1)+rect(3), :);
     imshow(im)
     hold on
     
@@ -88,11 +88,20 @@ while hasFrame(v)
     %MinRadiusN = round(MinRadius*((v.NumFrames-iter)/(v.NumFrames)));
     %MaxRadiusN = round(MaxRadius*((v.NumFrames-iter)/(v.NumFrames)));
     % Use hough transform to find circles (darker then the background)
-    [centers, radii, metric] = imfindcircles(adapthisteq(rgb2gray(imCrop)),[MinRadius MaxRadius], 'ObjectPolarity','dark');
-    % Keep the best circle
-    [val, idx] = max(metric);
-    center = centers(idx,:);
-    radius = radii(idx);
+    if (iter>1)
+        [centers, radii, metric] = imfindcircles(adapthisteq(rgb2gray(imCrop)),[MinRadius MaxRadius], 'ObjectPolarity','dark');
+        % Keep circle most similar to last circle
+        [val, idx] = min(abs(radii-movVector(iter-1,3)));
+        center = centers(idx,:);
+        radius = radii(idx);
+    else
+        [centers, radii, metric] = imfindcircles(adapthisteq(rgb2gray(imCrop)),[MaxRadius*0.8 MaxRadius], 'ObjectPolarity','dark');
+        % Keep the best circle
+        [val, idx] = max(metric);
+        center = centers(idx,:);
+        radius = radii(idx);
+    end
+   
     
     % Estimate the flow on the image
     flow_v = estimateFlow(opticFlow_v,rgb2gray(imCrop));
@@ -195,14 +204,16 @@ while hasFrame(v)
             y_idx(y_idx < 1) = 1;y_idx(y_idx > initSize*2-1) = initSize*2+1;
             Vx_s= flow_s.Vx(x_idx', y_idx');
             Vy_s = flow_s.Vy(x_idx', y_idx');
+            M_s = flow_s.Magnitude(x_idx', y_idx');
         catch % assume error in choosing frame around ball, and set to zero
             Vx_s = 0;
             Vy_s = 0;
+            M_s = 0;
         end
         
         % Only use the highest (most prominant spin values in the calculation)
-        NewsquareMagnitude_s = maxk(squareMagnitude_s, 10, 1);
-        [~, m_I] = maxk(NewsquareMagnitude_s, 10, 2);
+        M_ss = maxk(M_s, 10, 1);
+        [~, m_I] = maxk(M_ss, 10, 2);
         Vx_s_m = Vx_s(m_I);
         Vy_s_m = Vy_s(m_I);
         
@@ -222,6 +233,8 @@ while hasFrame(v)
             averageOrientation_s =   pi + atan((-avg_sy)/(-avg_sx));
         elseif (avg_sx>0 && avg_sy<0)
             averageOrientation_s =  2*pi - atan((-avg_sy)/(avg_sx));
+        else
+            averageOrientation_s = 0;
         end
         averageOrientation_s = 2*pi - averageOrientation_s;
         dir_spin = (averageOrientation_s/pi)*180;  
@@ -299,102 +312,116 @@ for k = 1:numel(s)
 end
 close(vOut)
 
-%% HERE WE FIND PLOT THE TRAJECTORY SEEN FROM ABOVE
+
+%% HERE WE FIND AND PLOT THE TRAJECTORY SEEN FROM ABOVE
 
 % Read the first video fram, uses chooses 8 points
 imshow(J);
 
-% Remove potental zeros at the start of the move vector
-for i=1:size(movVector,1)
-    if (movVector(i,:)==0)
-        mV = movVector(i+1:end,:);
-    end
-end
+% Remove potental zeros
+mV = reshape(movVector(movVector>0), [size(movVector(movVector>0),1)/3, 3]);
 
-disp('Select 8 points, then press enter');
-[xi, yi] = getpts;
+%----Original code
+%disp('Select 32 points (that form 8 right angles), then press enter');
+%[xii, yii] = getpts;
+
+%---To save you the hastle of choosing all of the points, here you can load
+% them (given that the same video crop is used)
+xii = load('Similarity/vars.mat', 'xi').xi;
+yii = load('Similarity/vars.mat', 'yi').yi;
 
 hold on
 
-% plot the lines
-plot([xi(1) xi(2)], [yi(1), yi(2)], 'r', 'linewidth', 5);
-plot([xi(3) xi(4)], [yi(3), yi(4)], 'r', 'linewidth', 5);
-plot([xi(5) xi(6)], [yi(5), yi(6)], 'b', 'linewidth', 5);
-plot([xi(7) xi(8)], [yi(7), yi(8)], 'b', 'linewidth', 5);
+N = size(xii,1);
+a = zeros(N,3);
+l = zeros(3,N/4);
+m = zeros(3,N/4);
+A = zeros(N/4,6);
 
-% get the homogeneous poins
-a = [xi(1); yi(1); 1];
-b = [xi(2); yi(2); 1];
-c = [xi(3); yi(3); 1];
-d = [xi(4); yi(4); 1];
-e = [xi(5); yi(5); 1];
-f = [xi(6); yi(6); 1];
-g = [xi(7); yi(7); 1];
-h = [xi(8); yi(8); 1];
+for i=1:N
+    a(i,:) = [xii(i); yii(i); 1];
+end
+for i=1:2:(N/2-1)
+    plot([xii(i) xii(i+1)], [yii(i), yii(i+1)], 'linewidth', 5);
+end
+for i=1:4:N
+    l(:,i) = cross(a(i,:)', a(i+1,:)');
+    m(:,i) = cross(a(i+2,:)', a(i+3,:)');
+end
+for i=1:N/4
+    A(i, :) = [l(1,i)*m(1,i),0.5*(l(1,i)*m(2,i)+l(2,i)*m(1,i)),l(2,i)*m(2,i),...
+            0.5*(l(1,i)*m(3,i)+l(3,i)*m(1,i)),  0.5*(l(2,i)*m(3,i)+l(3,i)*m(2,i)), l(3,i)*m(3,i)];
+end
+         
+%%
 
-% get the two points at infinity
-l1 = cross(a, b);
-l2 = cross(c, d);
-i = cross(l1, l2); %point at inf
-l3 = cross(e, f);
-l4 = cross(g, h);
-j = cross(l3, l4); %point at inf
-% normalize points
-i = i/i(3);
-j = j/j(3);
+[~,~,v] = svd(A); %
+sol = v(:,end); %sol = (a,b,c,d,e,f)  [a,b/2,d/2; b/2,c,e/2; d/2 e/2 f];
+imDCCP = [sol(1)  , sol(2)/2, sol(4)/2;...
+    sol(2)/2, sol(3)  , sol(5)/2;...
+    sol(4)/2, sol(5)/2  sol(6)];
 
-% plot lines to line at inf. and line at inf.
-plot([i(1) j(1)], [i(2) j(2)], 'g--');
-plot([a(1) i(1)], [a(2) i(2)], 'b');
-plot([d(1) i(1)], [d(2) i(2)], 'b');
-plot([f(1) j(1)], [f(2) j(2)], 'b');
-plot([h(1) j(1)], [h(2) j(2)], 'b');
+
+[U,D,V] = svd(imDCCP);
+D(3,3) = 1;
+A = U*sqrt(D);
+
+C = [eye(2),zeros(2,1);zeros(1,3)];
+min(norm(A*C*A' - imDCCP),norm(A*C*A' + imDCCP))
+
+H = inv(A); % rectifying homography
+min(norm(H*imDCCP*H'./norm(H*imDCCP*H') - C./norm(C)),norm(H*imDCCP*H'./norm(H*imDCCP*H') + C./norm(C)))
+
+
+tform = projective2d(H');
+K = imwarp(J,tform);
+
+figure;
+imshow(K);
 
 hold off
 %%
-% Find the projective transform matrix H
-horizon = cross(i,j); %horizon line
-horizon = horizon/horizon(3); %normalize
-H = [-1 0 0; 0 -1 0; horizon(1) horizon(2) 1];
-% double check that the H matrix is correct
-disp('Horizon: ');
-disp(vpa(inv(H)'*[0;0;1])); %vpa for higher precision
-disp('Line at infinity:');
-disp(vpa(H'*horizon));
 
+b = zeros(3,8);
 
-% Plot the path of the ball on the original image
+for i=1:size(b,2)
+    b(:,i) = H*a(i,:)';
+    b(:,i) = b(:,i)/b(3,i);
+end
+
 figure;imshow(J);
 hold on
-
-line([xi(1),xi(2)], [yi(1), yi(2)], 'Color','red','LineStyle','--', 'LineWidth', 1.5);
-line([xi(3),xi(4)], [yi(3), yi(4)], 'Color','red','LineStyle','--', 'LineWidth', 1.5);
-plot(mV(:,1),mV(:,2), 'Color','blue', 'LineWidth', 1.5);
-legend_str{1} = 'Side line';
-legend_str{2} = 'Side line';
-legend_str{3} = 'Measured trajectory';
-legend(legend_str);
+for i=1:2:size(b,2)
+    line([a(i,1),a(i+1,1)], [a(i,2),a(i+1,2)], 'LineWidth', 3, 'Color', 'blue');
+end
+plot(mV(:,1),mV(:,2), 'Color','red', 'LineWidth', 1.5);
 hold off
 
-% find the the new path and lines seen from above
-a = H*[xi(1); yi(1); 1];
-b = H*[xi(2); yi(2); 1];
-c = H*[xi(3); yi(3); 1];
-d = H*[xi(4); yi(4); 1];
-a = a/a(3); b = b/b(3); c = c/c(3); d = d/d(3); % normalize
-movVector_new = mV; 
-movVector_new(:,3) = 1;
-movVector_new = (H*(movVector_new'))';
-movVector_new = movVector_new./movVector_new(:,3);
+mV_new = mV; 
+mV_new(:,3) = 1;
+mV_new = (H*mV_new')';
+mV_new = mV_new./mV_new(:,3);
 
 % Plot the lines and path seen from above
 figure;
+subplot(1,2,1);
+hold on 
+for i=1:2:size(b,2)
+    line([a(i,1),a(i+1,1)], [a(i,2),a(i+1,2)], 'Color', 'blue');
+end
+plot(mV(:,1),mV(:,2), 'Color','red', 'LineWidth', 1.5);
+set(gca, 'YDir','reverse'); % We invert the axis since a normal image has y axis inverted when shown
+hold off
+
+% The values are set to negative just to make the plot more plesant to
+% campare
+b = -b;
+mV_new = -mV_new;
+subplot(1,2,2);
 hold on
-line([a(1), b(1)], [a(2), b(2)], 'Color', 'blue');
-line([c(1), d(1)], [c(2), d(2)], 'Color', 'blue');
-plot(movVector_new(:,1),movVector_new(:,2), 'Color', 'red');
-legend_str{1} = 'Side line';
-legend_str{2} = 'Side line';
-legend_str{3} = 'Measured trajectory';
-legend(legend_str);
+for i=1:2:size(b,2)
+    line([b(1,i),b(1,i+1)], [b(2,i),b(2,i+1)], 'Color', 'blue');
+end
+plot(mV_new(:,1),mV_new(:,2), 'Color', 'red');
+set(gca, 'YDir','reverse');
 hold off
