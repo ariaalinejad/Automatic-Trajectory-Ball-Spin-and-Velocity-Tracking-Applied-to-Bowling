@@ -1,6 +1,6 @@
 ## Automatic Trajectory, Ball Spin, and Velocity Tracking Applied to Bowling
 
-This project was part of the course "Image Analysis and Computer Vision" at Politecnico di Milano. 
+This project was part of the course "Image Analysis and Computer Vision" at Politecnico di Milano. All of the details and results are to be found in the report.
 
 
 Given a video of a bowling game our implementation aims at providing useful information to
