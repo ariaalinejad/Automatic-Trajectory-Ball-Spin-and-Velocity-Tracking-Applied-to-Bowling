@@ -6,7 +6,7 @@ v = VideoReader('Videos/Aria_1.MOV');
 % Choose frame of video
 im = read(v,v.NumFrames/2);
 imshow(im)
-title('Select the region of the image you want to analyze, then double kick on it');
+title('Select the region of the image you want to analyze, then double click on it');
 hold on
 [J, rect] = imcrop(im);
 rect = floor(rect);
