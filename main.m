@@ -1,7 +1,6 @@
 clc;close all;clear all;
 % Access video file
-%v = VideoReader('Videos/IMG_0923.MOV');
-v = VideoReader('Videos/Aria_1.MOV');
+v = VideoReader('Videos/Bowling.MOV');
 
 % Choose frame of video
 im = read(v,v.NumFrames/2);
@@ -12,7 +11,7 @@ hold on
 rect = floor(rect);
 hold off
 %------Load values during testing to save time----
-%rect = load('R/vars.mat', 'rect').rect;
+%rect = load('vars.mat', 'rect').rect;
 %J = im(rect(2):rect(2)+rect(4), rect(1):rect(1)+rect(3), :);
 %-----------------------------------------------------------------
 
@@ -22,8 +21,8 @@ imshow(J);
 title('Select the four angles of the lane, then press enter');
 [xi, yi] = getpts;
 %-----Load values during testing to save time----
-%yi = load('R/vars.mat', 'yi').yi;
-%xi = load('R/vars.mat', 'xi').xi;
+%yi = load('vars.mat', 'yi').yi;
+%xi = load('vars.mat', 'xi').xi;
 %-----------------------------------------------------------------
 hold on
 
@@ -288,35 +287,27 @@ while hasFrame(v)
     hold off
    
 end
-
-v2 = VideoReader('Videos/Aria_1.MOV');
-v2 = readFrame(v2);
-figure;
-imshow(v2(rect(2):rect(2)+rect(4), rect:rect(1)+rect(3), :))
-hold on
-plot(movVector(:,1),movVector(:,2),'r-o','LineWidth',2);
-legend('Measured trajectory');
-hold off
-
-
+%--------Show and save the output video-----------
 % Remove any unused structure array elements
 s(k:end) = [];
 
 % Open a new figure and play the movie from the structure
 hFig2 = figure;
-movie(hFig2,s,1,v.FrameRate);
+set(gcf, 'Position', get(0, 'Screensize'));
+axis off
+title('This video will be saved as "Videos/BowlingOutput.mp4". The frame rate is lowered 4 times for easier reading.');
+movie(hFig2,s,1,v.FrameRate/4);
 
 % Write to a video file
 % This could be done within the original loop, but I wanted to show it
 % separately
-vOut = VideoWriter('Videos/slowmoCut3','MPEG-4');
-vOut.FrameRate = v.FrameRate;
+vOut = VideoWriter('Videos/BowlingOutput','MPEG-4');
+vOut.FrameRate = v.FrameRate/4;
 open(vOut)
 for k = 1:numel(s)
     writeVideo(vOut,s(k))
 end
 close(vOut)
-
 
 %% HERE WE FIND AND PLOT THE TRAJECTORY SEEN FROM ABOVE
 
@@ -324,7 +315,7 @@ close(vOut)
 imshow(J);
 
 %-------To allow for testing without running the whole code------
-%movVector = load('R/vars.mat', 'movVector').movVector;
+%movVector = load('vars.mat', 'movVector').movVector;
 %----------------------------------------------------------------
 
 % Remove potental zeros
@@ -334,8 +325,8 @@ mV = reshape(movVector(movVector>0), [size(movVector(movVector>0),1)/3, 3]);
 %[xii, yii] = getpts;
 %---To save you the hastle of choosing all of the points, here you can load
 % them (given that the same video crop is used)
-xii = load('R/vars.mat', 'xii').xii;
-yii = load('R/vars.mat', 'yii').yii;
+xii = load('vars.mat', 'xii').xii;
+yii = load('vars.mat', 'yii').yii;
 %-------------------------------------------------------------------
 hold on
 
